@@ -1,10 +1,24 @@
 cmake_minimum_required(VERSION 2.8.7)
 
+# risc-v compiler
+set(CMAKE_C_COMPILER riscv64-unknown-linux-gnu-gcc)
+# skip the C Compiler test
+set(CMAKE_C_COMPILER_WORKS 1)
+
+SET(BUILD_SHARED_LIBS OFF)
+SET(CMAKE_EXE_LINKER_FLAGS "-static")
+set(CMAKE_SHARED_LIBRARY_LINK_C_FLAGS)
+
+# path of libpng & zlib static library
+SET(PNG_INCLUDES "/media/psf/Home/webp/riscv_libs/libpng-1.6.35/build/include")
+SET(PNG_LIBS "/media/psf/Home/webp/riscv_libs/libpng-1.6.35/build/lib/libpng16.a")
+SET(Z_LIBS "/media/psf/Home/webp/riscv_libs/zlib-1.2.11/build/lib/libz.a")
+
 project(libwebp C)
 
 # Options for coder / decoder executables.
-option(WEBP_ENABLE_SIMD "Enable any SIMD optimization." ON)
-option(WEBP_BUILD_CWEBP "Build the cwebp command line tool." OFF)
+option(WEBP_ENABLE_SIMD "Enable any SIMD optimization." OFF)
+option(WEBP_BUILD_CWEBP "Build the cwebp command line tool." ON)
 option(WEBP_BUILD_DWEBP "Build the dwebp command line tool." OFF)
 option(WEBP_BUILD_GIF2WEBP "Build the gif2webp conversion tool." OFF)
 option(WEBP_BUILD_IMG2WEBP "Build the img2webp animation tool." OFF)
@@ -176,6 +190,10 @@ endforeach()
 # Build the executables if asked for.
 if(WEBP_BUILD_CWEBP OR WEBP_BUILD_DWEBP OR
    WEBP_BUILD_GIF2WEBP OR WEBP_BUILD_IMG2WEBP OR WEBP_BUILD_WEBP_JS)
+
+  # path of libpng head files
+  include_directories(imageenc ${PNG_INCLUDES})
+
   # Example utility library.
   parse_Makefile_am(${CMAKE_CURRENT_SOURCE_DIR}/examples "EXAMPLEUTIL_SRCS"
     "example_util_[^ ]*")
@@ -192,14 +210,16 @@ if(WEBP_BUILD_CWEBP OR WEBP_BUILD_DWEBP OR
   parse_Makefile_am(${CMAKE_CURRENT_SOURCE_DIR}/imageio "IMAGEDEC_SRCS"
     "imagedec_[^ ]*")
   add_library(imagedec ${IMAGEDEC_SRCS})
+  include_directories(imageenc ${PNG_INCLUDES})
   target_link_libraries(imagedec imageioutil webpdemux webp
-    ${WEBP_DEP_IMG_LIBRARIES})
+    ${WEBP_DEP_IMG_LIBRARIES} ${PNG_LIBS} ${Z_LIBS})
 
   # Image-encoding utility library.
   parse_Makefile_am(${CMAKE_CURRENT_SOURCE_DIR}/imageio "IMAGEENC_SRCS"
     "imageenc_[^ ]*")
   add_library(imageenc ${IMAGEENC_SRCS})
-  target_link_libraries(imageenc webp)
+  include_directories(imageenc ${PNG_INCLUDES})
+  target_link_libraries(imageenc webp ${PNG_LIBS} ${Z_LIBS})
 
   set_property(TARGET exampleutil imageioutil imagedec imageenc
     PROPERTY INCLUDE_DIRECTORIES
@@ -220,14 +240,16 @@ endif()
 
 if(WEBP_BUILD_CWEBP)
   # cwebp
-  include_directories(${WEBP_DEP_IMG_INCLUDE_DIRS})
+  include_directories(${WEBP_DEP_IMG_INCLUDE_DIRS} ${PNG_INCLUDES})
   parse_Makefile_am(${CMAKE_CURRENT_SOURCE_DIR}/examples "CWEBP_SRCS"
     "cwebp")
   add_executable(cwebp ${CWEBP_SRCS})
-  target_link_libraries(cwebp exampleutil imagedec webp)
+  # link libpng zlib and math lib while generatng the cwebp
+  target_link_libraries(cwebp exampleutil imagedec webp ${PNG_LIBS} ${Z_LIBS} m)
   install(TARGETS cwebp RUNTIME DESTINATION bin)
   set_property(TARGET cwebp PROPERTY INCLUDE_DIRECTORIES
     ${CMAKE_CURRENT_SOURCE_DIR}/src ${CMAKE_CURRENT_BINARY_DIR}/src)
+  SET(CMAKE_EXE_LINKER_FLAGS "-static")
 endif()
 
 if(WEBP_BUILD_GIF2WEBP AND NOT GIF_FOUND)
